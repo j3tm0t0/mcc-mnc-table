@@ -1,49 +1,47 @@
 # Get the Mobile Country Codes (MCC) and Mobile Network Codes (MNC) table
 # from mcc-mnc.com and output it in XML format.
 
-import re
 import urllib.request
+from bs4 import BeautifulSoup
 import xml.etree.ElementTree as element_tree
 import xml.dom.minidom as minidom
 
-td_re = re.compile('<td>([^<]*)</td>'*6)
-
 with urllib.request.urlopen('http://mcc-mnc.com/') as f:
     html = f.read().decode('utf-8')
-
-    tbody_start = False
-
+    soup = BeautifulSoup(html, 'html.parser')
+    
+    # Find the table with MCC/MNC data
+    table = soup.find('table')
+    
     mcc_mnc_list = []
-
-    for line in html.split('\n'):
-        if '<tbody>' in line:
-            tbody_start = True
-        elif '</tbody>' in line:
-            break
-        elif tbody_start:
-            td_search = td_re.search(line)
-            current_item = {}
-            td_search = td_re.split(line)
-
-            current_item['mcc'] = td_search[1]
-            current_item['mnc'] = td_search[2]
-            current_item['iso'] = td_search[3]
-            current_item['country'] = td_search[4]
-            current_item['country_code'] = td_search[5]
-            current_item['network'] = td_search[6][0:-1]
-
-            mcc_mnc_list.append(current_item)
-
+    
+    if table:
+        # Process each row in the table (skip header row)
+        for row in table.find_all('tr')[1:]:  # Skip header row
+            cells = row.find_all('td')
+            if len(cells) >= 6:  # Ensure we have enough cells
+                current_item = {}
+                current_item['mcc'] = cells[0].text.strip()
+                current_item['mnc'] = cells[1].text.strip()
+                current_item['iso'] = cells[2].text.strip()
+                current_item['country'] = cells[3].text.strip()
+                current_item['country_code'] = cells[4].text.strip()
+                current_item['network'] = cells[5].text.strip()
+                
+                mcc_mnc_list.append(current_item)
+    else:
+        print("Error: Could not find table in the HTML")
+    
     root_element = element_tree.Element('carriers')
-
+    
     for carrier in mcc_mnc_list:
         sub_element = element_tree.Element('carrier')
-
+        
         for key, value in carrier.items():
             child_element = element_tree.Element(key)
             child_element.text = value
             sub_element.append(child_element)
-
+        
         root_element.append(sub_element)
-
+    
     print(minidom.parseString(element_tree.tostring(root_element)).toprettyxml(indent = '    '))
